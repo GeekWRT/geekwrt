@@ -11,7 +11,7 @@ ifneq ($(CONFIG_USE_LLVM_HOST),)
   else
     BPF_PATH:=$(PATH)
   endif
-  CLANG:=$(call find-llvm-tool,clang clang-13 clang-12)
+  CLANG:=$(call find-llvm-tool,clang-18 clang-17 clang-16 clang-15 clang-14 clang-13 clang-12 clang)
   LLVM_VER:=$(subst clang,,$(notdir $(CLANG)))
 
   BPF_PATH:=$(dir $(CLANG)):$(BPF_PATH)
@@ -20,20 +20,32 @@ ifneq ($(CONFIG_USE_LLVM_HOST),)
   LLVM_OPT:=$(call find-llvm-tool,opt$(LLVM_VER))
   LLVM_STRIP:=$(call find-llvm-tool,llvm-strip$(LLVM_VER))
 else
-  LLVM_PATH:=/invalid
+  # Auto-detect host LLVM/clang toolchain
+  HOST_CLANG:=$(firstword $(shell command -v clang-18 clang-17 clang-16 clang-15 clang-14 clang-13 clang-12 clang 2>/dev/null || echo "none-hc"))
+  ifneq ($(HOST_CLANG),none-hc)
+    CLANG:=$(HOST_CLANG)
+    LLVM_VER:=$(subst clang,,$(notdir $(CLANG)))
+    BPF_PATH:=$(dir $(CLANG)):$(PATH)
+    LLVM_LLC:=$(firstword $(shell PATH='$(BPF_PATH)' command -v llc$(LLVM_VER) llc 2>/dev/null || echo "none-hc"))
+    LLVM_DIS:=$(firstword $(shell PATH='$(BPF_PATH)' command -v llvm-dis$(LLVM_VER) llvm-dis 2>/dev/null || echo "none-hc"))
+    LLVM_OPT:=$(firstword $(shell PATH='$(BPF_PATH)' command -v opt$(LLVM_VER) opt 2>/dev/null || echo "none-hc"))
+    LLVM_STRIP:=$(firstword $(shell PATH='$(BPF_PATH)' command -v llvm-strip$(LLVM_VER) llvm-strip 2>/dev/null || echo "none-hc"))
+  else
+    LLVM_PATH:=/invalid
 
-  ifneq ($(CONFIG_USE_LLVM_PREBUILT),)
-    LLVM_PATH:=$(TOPDIR)/llvm-bpf/bin
-  endif
-  ifneq ($(CONFIG_USE_LLVM_BUILD),)
-    LLVM_PATH:=$(STAGING_DIR_HOST)/llvm-bpf/bin
-  endif
+    ifneq ($(CONFIG_USE_LLVM_PREBUILT),)
+      LLVM_PATH:=$(TOPDIR)/llvm-bpf/bin
+    endif
+    ifneq ($(CONFIG_USE_LLVM_BUILD),)
+      LLVM_PATH:=$(STAGING_DIR_HOST)/llvm-bpf/bin
+    endif
 
-  CLANG:=$(LLVM_PATH)/clang
-  LLVM_LLC:=$(LLVM_PATH)/llc
-  LLVM_DIS:=$(LLVM_PATH)/llvm-dis
-  LLVM_OPT:=$(LLVM_PATH)/opt
-  LLVM_STRIP:=$(LLVM_PATH)/llvm-strip
+    CLANG:=$(LLVM_PATH)/clang
+    LLVM_LLC:=$(LLVM_PATH)/llc
+    LLVM_DIS:=$(LLVM_PATH)/llvm-dis
+    LLVM_OPT:=$(LLVM_PATH)/opt
+    LLVM_STRIP:=$(LLVM_PATH)/llvm-strip
+  endif
 endif
 
 BPF_KARCH:=mips
