@@ -1,0 +1,55 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+
+      - name: Setup upstream
+        run: |
+          git remote add upstream https://github.com/openwrt/openwrt.git
+          git config user.email "geekwrt@users.noreply.github.com"
+          git config user.name "GeekWRT"
+
+      - name: Sync openwrt-25.12
+        run: |
+          git fetch upstream openwrt-25.12
+          git checkout openwrt-25.12
+          git merge --ff-only upstream/openwrt-25.12 && \
+            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 || \
+            echo "not fast-forward, skipping"
+
+      - name: Sync master（含 XR30 commit）
+        run: |
+          git fetch upstream main
+          git checkout master
+          git rebase upstream/main || {
+            echo "CONFLICT! aborting..."
+            git rebase --abort
+            exit 1
+          }
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git master --force
+
+      - name: Notify on conflict
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Sync conflict',
+              body: 'master rebase failed, resolve locally:\n' +
+                '```\ngit fetch upstream main\ngit checkout master\n' +
+                'git rebase upstream/main\n# fix conflicts\ngit rebase --continue\n' +
+                'git push fork master --force\n```'
+            })
