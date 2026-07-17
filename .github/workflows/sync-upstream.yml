@@ -16,38 +16,54 @@ jobs:
           fetch-depth: 0
           ref: master
 
-      - name: Setup upstream
-        run: |
-          git remote add upstream https://github.com/openwrt/openwrt.git
-          git config user.email "geekwrt@users.noreply.github.com"
-          git config user.name "GeekWRT"
-
       - name: Sync openwrt-25.12
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
+          echo "Fetching upstream openwrt-25.12..."
+          git remote add upstream https://github.com/openwrt/openwrt.git
           git fetch origin openwrt-25.12
           git fetch upstream openwrt-25.12
-          git checkout -b openwrt-25.12 origin/openwrt-25.12
-          git rebase upstream/openwrt-25.12 || {
-            echo "CONFLICT! aborting..."
-            git rebase --abort
-            exit 1
-          }
-          git push https://x-access-token:${{ secrets.GH_SYNC_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 --force
+
+          UPSTREAM=$(git rev-parse upstream/openwrt-25.12)
+          FORK=$(git rev-parse origin/openwrt-25.12)
+
+          if [ "$UPSTREAM" = "$FORK" ] || git merge-base --is-ancestor origin/openwrt-25.12 upstream/openwrt-25.12 2>/dev/null; then
+            echo "openwrt-25.12 already up to date"
+          else
+            echo "Syncing openwrt-25.12..."
+            RESULT=$(gh api repos/${{ github.repository }}/merges \
+              --field base="openwrt-25.12" \
+              --field head="$UPSTREAM" \
+              --field commit_message="Merge upstream/openwrt-25.12 into openwrt-25.12" 2>&1)
+            echo "$RESULT" | jq -r '.sha // .message'
+          fi
 
       - name: Sync master
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
+          echo "Fetching upstream main..."
           git fetch upstream main
-          git checkout master
-          git rebase upstream/main || {
-            echo "CONFLICT! aborting..."
-            git rebase --abort
-            exit 1
-          }
-          git push https://x-access-token:${{ secrets.GH_SYNC_TOKEN }}@github.com/${{ github.repository }}.git master --force
+          git fetch origin master
+
+          UPSTREAM=$(git rev-parse upstream/main)
+          FORK=$(git rev-parse origin/master)
+
+          if [ "$UPSTREAM" = "$FORK" ] || git merge-base --is-ancestor origin/master upstream/main 2>/dev/null; then
+            echo "master already up to date"
+          else
+            echo "Syncing master..."
+            RESULT=$(gh api repos/${{ github.repository }}/merges \
+              --field base="master" \
+              --field head="$UPSTREAM" \
+              --field commit_message="Merge upstream/main into master" 2>&1)
+            echo "$RESULT" | jq -r '.sha // .message'
+          fi
 
       - name: Notify on conflict
         if: failure()
         run: |
-          echo "::error::Sync conflict detected! Resolve locally"
-          echo "::error::master: git fetch upstream main && git checkout master && git rebase upstream/main && git push fork master --force"
-          echo "::error::openwrt-25.12: git fetch upstream openwrt-25.12 && git checkout openwrt-25.12 && git rebase upstream/openwrt-25.12 && git push fork openwrt-25.12 --force"
+          echo "::error::Sync conflict detected! Manual resolution needed."
