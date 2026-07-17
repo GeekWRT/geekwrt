@@ -8,6 +8,8 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,11 +24,15 @@ jobs:
 
       - name: Sync openwrt-25.12
         run: |
+          git fetch origin openwrt-25.12
           git fetch upstream openwrt-25.12
-          git checkout openwrt-25.12
-          git merge --ff-only upstream/openwrt-25.12 && \
-            git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 || \
-            echo "not fast-forward, skipping"
+          git checkout -b openwrt-25.12 origin/openwrt-25.12
+          git rebase upstream/openwrt-25.12 || {
+            echo "CONFLICT! aborting..."
+            git rebase --abort
+            exit 1
+          }
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 --force
 
       - name: Sync master（含 XR30 commit）
         run: |
@@ -41,15 +47,7 @@ jobs:
 
       - name: Notify on conflict
         if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '⚠️ Sync conflict',
-              body: 'master rebase failed, resolve locally:\n' +
-                '```\ngit fetch upstream main\ngit checkout master\n' +
-                'git rebase upstream/main\n# fix conflicts\ngit rebase --continue\n' +
-                'git push fork master --force\n```'
-            })
+        run: |
+          echo "::error::Sync conflict detected! Resolve locally"
+          echo "::error::master: git fetch upstream main && git checkout master && git rebase upstream/main && git push fork master --force"
+          echo "::error::openwrt-25.12: git fetch upstream openwrt-25.12 && git checkout openwrt-25.12 && git rebase upstream/openwrt-25.12 && git push fork openwrt-25.12 --force"
