@@ -32,9 +32,9 @@ jobs:
             git rebase --abort
             exit 1
           }
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 --force
+          git push https://x-access-token:${{ secrets.GH_SYNC_TOKEN }}@github.com/${{ github.repository }}.git openwrt-25.12 --force
 
-      - name: Sync master（含 XR30 commit）
+      - name: Sync master
         run: |
           git fetch upstream main
           git checkout master
@@ -43,7 +43,7 @@ jobs:
             git rebase --abort
             exit 1
           }
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git master --force
+          git push https://x-access-token:${{ secrets.GH_SYNC_TOKEN }}@github.com/${{ github.repository }}.git master --force
 
       - name: Notify on conflict
         if: failure()
